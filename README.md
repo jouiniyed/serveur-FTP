@@ -29,11 +29,12 @@ Tous les échanges utilisent des structures binaires transmises avec `Rio_writen
 
 **request_t** (client → esclave)
 ```
-| typereq_t type | char nom[256] | size_t offset |
+| typereq_t type | char nom[256] | size_t offset | int propagate |
 ```
-- `type` : GET, LS ou BYE
-- `nom` : nom du fichier (GET uniquement)
+- `type` : GET, PUT, LS, RM ou BYE
+- `nom` : nom du fichier
 - `offset` : blocs déjà reçus, 0 si nouveau téléchargement (Q10)
+- `propagate` : 1 = ne pas re-propager (déjà propagé), 0 = propager aux autres esclaves (Q16)
 
 **response_t** (esclave → client)
 ```
@@ -60,10 +61,30 @@ client                      esclave
 ```
 client                      esclave
   |-- request_t (LS) ------------>|
-  |<-- response_t (SUCCES) --------|
-  |<-- size_t n -------------------|
-  |<-- char buf[n] ----------------|   (noms séparés par \n)
+  |<-- response_t (SUCCES) -------|
+  |<-- size_t n ------------------|
+  |<-- char buf[n] ---------------|   (noms séparés par \n)
 ```
+
+### Séquence RM (Q16)
+
+```
+client                      esclave
+  |-- request_t (RM, nom) ------->|
+  |<-- response_t (SUCCES/ERREUR)-|
+```
+
+### Séquence PUT (Q16)
+
+```
+client                      esclave
+  |-- request_t (PUT, nom) ------>|
+  |<-- response_t (SUCCES) -------|
+  |-- size_t nb_blocs ----------->|
+  |-- bloc[0..nb_blocs] (512B) -->|  x nb_blocs
+```
+
+Après un PUT ou RM réussi, l'esclave propage la même opération aux autres esclaves connus (avec `propagate=1` pour éviter une boucle).
 
 ---
 
@@ -137,3 +158,38 @@ get gros.bin
 |---|---|
 | ftpmaster | 2121 |
 | ftpslave  | 2122 (modifiable via argv) |
+
+### Test Q16 — rm et put (serveur simple)
+
+```bash
+# Terminal 1 — lancer le serveur
+./ftpserveri
+
+# Terminal 2 — client
+./ftpclient localhost
+ls                    # lister les fichiers du serveur
+put mon_fichier.txt   # envoyer dirClient/mon_fichier.txt vers dirServer/
+ls                    # vérifier qu'il est arrivé
+rm mon_fichier.txt    # supprimer le fichier sur le serveur
+ls                    # vérifier que c'est supprimé
+bye
+```
+
+### Test Q16 — propagation rm/put (2 esclaves)
+
+```bash
+# Terminal 1 — esclave 1 (propagation vers esclave 2)
+./ftpslave 2122 localhost 2123
+
+# Terminal 2 — esclave 2 (propagation vers esclave 1)
+./ftpslave 2123 localhost 2122
+
+# Terminal 3 — maître (NB_SLAVES = 2 dans ftpmaster.c)
+./ftpmaster localhost 2122 localhost 2123
+
+# Terminal 4 — client
+./ftpclient localhost
+put mon_fichier.txt   # esclave 1 reçoit et propage automatiquement à esclave 2
+rm mon_fichier.txt    # idem, suppression propagée
+bye
+```

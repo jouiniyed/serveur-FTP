@@ -27,8 +27,21 @@ int main(int argc, char **argv)
     struct sockaddr_in clientaddr;
 
     // on peut passer le port en argument, sinon on utilise PORT_ESCLAVE par defaut
-    // ex : ./ftpslave 2123  pour lancer un deuxieme esclave sur le meme machine
-    int port = (argc == 2) ? atoi(argv[1]) : PORT_ESCLAVE;
+    // ex : ./ftpslave 2122 localhost 2123  (port propre + adresses des autres esclaves)
+    int port = (argc >= 2) ? atoi(argv[1]) : PORT_ESCLAVE;
+
+    // Q16 : recuperer les adresses des autres esclaves pour la propagation rm/put
+    // les args suivants sont des paires "ip port" pour les autres esclaves
+    char autres_ips[10][64];
+    int  autres_ports[10];
+    int  j = 0;
+    for (int i = 2; i + 1 < argc && j < 10; i += 2, j++) {
+        strncpy(autres_ips[j], argv[i], 63);
+        autres_ips[j][63] = '\0';
+        autres_ports[j] = atoi(argv[i + 1]);
+        printf("Propagation vers : %s:%d\n", autres_ips[j], autres_ports[j]);
+    }
+    set_slaves(autres_ips, autres_ports, j);
 
     Signal(SIGCHLD, child_handler);
     Signal(SIGINT, parent_stop_handler);

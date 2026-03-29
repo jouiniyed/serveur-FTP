@@ -111,3 +111,56 @@ response_t filereader(int connfd, char fichier[256], size_t offset)
     return res;
 }
 
+// Q16 : supprime un fichier dans dirServer
+response_t filerm(int connfd, char fichier[256]) {
+    response_t res;
+    char path[512];
+
+    strcpy(path, DIR_SERVER);
+    strcat(path, fichier);
+
+    if (unlink(path) < 0) {
+        res.code = ERREUR; // fichier introuvable ou pas les droits
+    } else {
+        res.code = SUCCES;
+    }
+
+    Rio_writen(connfd, &res, sizeof(res));
+    return res;
+}
+
+// Q16 : recoit un fichier du client bloc par bloc et le sauvegarde dans dirServer
+response_t fileput(int connfd, char fichier[256], rio_t *rio) {
+    response_t res;
+    char path[512];
+
+    strcpy(path, DIR_SERVER);
+    strcat(path, fichier);
+
+    // dire au client qu'on est pret a recevoir
+    res.code = SUCCES;
+    Rio_writen(connfd, &res, sizeof(res));
+
+    // lire le nombre de blocs que le client va envoyer
+    size_t nb_blocs;
+    Rio_readnb(rio, &nb_blocs, sizeof(size_t));
+
+    // creer (ou ecraser) le fichier sur le serveur
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        res.code = ERREUR;
+        return res;
+    }
+
+    char buf[BLOCK_SIZE];
+    ssize_t n;
+    for (size_t i = 0; i < nb_blocs; i++) {
+        n = Rio_readnb(rio, buf, BLOCK_SIZE);
+        Write(fd, buf, n);
+    }
+
+    close(fd);
+    res.code = SUCCES;
+    return res;
+}
+

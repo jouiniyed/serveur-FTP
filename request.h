@@ -14,6 +14,7 @@ struct request{
     typereq_t type;
     char nom[256];
     size_t offset; // Q10 : nombre de blocs déjà reçus par le client (0 = nouveau téléchargement)
+    int propagate; // Q16 : 1 = ne pas propager (déjà fait), 0 = propager aux autres esclaves
 };
 
 request_t* init_request(typereq_t type, char nom[256]);
@@ -25,5 +26,8 @@ typereq_t getType(request_t *r);
 char* getNom(request_t *r);
 
 response_t requestHandler(int connfd);
+
+// Q16 : definir les esclaves connus pour la propagation rm/put
+void set_slaves(char ips[][64], int ports[], int nb);
 
 #endif

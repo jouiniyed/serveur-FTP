@@ -194,6 +194,71 @@ int main(int argc, char **argv)
                 } else {
                     printf("Erreur de connexion avec le serveur\n");
                 }
+            } else if (strcmp(cmd, "rm") == 0 || strcmp(cmd, "RM") == 0) {
+                // Q16 : demander au serveur de supprimer un fichier
+                request_t req;
+                memset(&req, 0, sizeof(request_t));
+                req.type = RM;
+                strncpy(req.nom, arg, 255);
+                req.nom[255] = '\0';
+
+                Rio_writen(clientfd, &req, sizeof(request_t));
+
+                response_t res;
+                if (Rio_readnb(&rio, &res, sizeof(response_t)) > 0) {
+                    if (res.code == SUCCES)
+                        printf("Fichier %s supprime avec succes.\n", arg);
+                    else
+                        printf("Erreur : fichier introuvable sur le serveur.\n");
+                }
+
+            } else if (strcmp(cmd, "put") == 0 || strcmp(cmd, "PUT") == 0) {
+                // Q16 : envoyer un fichier local vers le serveur
+                char src[512];
+                strcpy(src, DIR_CLIENT);
+                strcat(src, arg);
+
+                FILE *fin = fopen(src, "rb");
+                if (fin == NULL) {
+                    printf("Fichier local introuvable : %s\n", src);
+                } else {
+                    request_t req;
+                    memset(&req, 0, sizeof(request_t));
+                    req.type = PUT;
+                    strncpy(req.nom, arg, 255);
+                    req.nom[255] = '\0';
+
+                    Rio_writen(clientfd, &req, sizeof(request_t));
+
+                    // attendre que le serveur soit pret
+                    response_t res;
+                    if (Rio_readnb(&rio, &res, sizeof(response_t)) > 0 && res.code == SUCCES) {
+
+                        // calculer le nombre de blocs a envoyer
+                        fseek(fin, 0, SEEK_END);
+                        size_t file_size = ftell(fin);
+                        fseek(fin, 0, SEEK_SET);
+                        size_t nb_blocs = (file_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+                        Rio_writen(clientfd, &nb_blocs, sizeof(size_t));
+
+                        char bloc[BLOCK_SIZE];
+                        size_t sent = 0;
+                        while (sent < nb_blocs) {
+                            size_t n = fread(bloc, 1, BLOCK_SIZE, fin);
+                            if (n < BLOCK_SIZE) memset(bloc + n, 0, BLOCK_SIZE - n); // rembourrage
+                            Rio_writen(clientfd, bloc, BLOCK_SIZE);
+                            sent++;
+                        }
+
+                        printf("Fichier %s envoye avec succes.\n", arg);
+                    } else {
+                        printf("Erreur : le serveur n'est pas pret a recevoir.\n");
+                    }
+
+                    fclose(fin);
+                }
+
             } else {
                 printf("Commande n'est pas supporte par le client\n"); // commande différente de "get" ou "GET"
             }
@@ -219,7 +284,7 @@ int main(int argc, char **argv)
                 printf("Erreur lors du ls\n");
             }
         } else {
-            printf("Usage : get <nom_fichier> | ls | bye\n"); // erreur dans les arguments
+            printf("Usage : get <nom_fichier> | put <nom_fichier> | rm <nom_fichier> | ls | bye\n"); // erreur dans les arguments
         }
     }
 
